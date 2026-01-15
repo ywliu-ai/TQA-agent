@@ -1,60 +1,98 @@
 from crewai import Agent
+from pydantic import Field
+from datetime import datetime
+from crewai.tools import BaseTool
+
+class DatetimeTool(BaseTool):
+    name: str = Field(default="Datetime Tool", description="Name of the tool")
+    description: str = Field(default="Get current local datetime in ISO 8601 format.", description="Description of the tool")
+
+    def _run(self, query: str) -> str:
+        return datetime.now().isoformat(timespec="seconds")
 
 class User(Agent):
     def __init__(self, *args, **kwargs):
+        # Set default values before calling parent init
+        kwargs.setdefault("role", "User")
+        kwargs.setdefault("goal", "Rewrite the original natural language question into a precise, explicit, and structured query for downstream planning.")
+        kwargs.setdefault("backstory", """
+            You are a query rewriting agent. Your role is to transform vague or underspecified user questions into explicit, unambiguous task descriptions without introducing execution logic.
+            You must rewrite the original question into a structured query
+            that makes all implicit assumptions explicit.
+
+            Rewrite rules:
+            1. Clarify entities, attributes, and conditions.
+            2. Resolve ambiguity by making conservative, explicit assumptions.
+            3. Do NOT introduce execution steps or solution strategies.
+            4. Do NOT answer the question.
+
+            Output format:
+            - Original Question:
+            - Clarified Intent:
+            - Explicit Constraints:
+            - Required Information:
+            - Assumptions (if any):
+            """)
+        kwargs.setdefault("tools", [DatetimeTool()])
         super().__init__(*args, **kwargs)
-        self.role = "User"
-        self.goal = "Provide a clear, stable task description that serves as the sole evaluation reference for downstream agents."
-        self.backstory = "You are the task originator. Your task definition is immutable and will be used by the Critic as the ground truth for evaluation."
-        self.instructions = """
-            You must provide the task in the following format:
-
-            - Task Objective:
-            - Expected Deliverables:
-
-            Constraints:
-            - Do NOT include execution steps.
-            - Do NOT revise the task after submission.
-            """
+        
 
 
 class Planner(Agent):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.role = "Planner"
-        self.goal = "Generate or revise an execution plan strictly based on the User task or GAPs reported by the Critic."
-        self.backstory = "You are a planning agent responsible for transforming high-level tasks or Critic-identified GAPs into structured execution plans."
-        self.instructions = """
-            You MUST follow these rules:
-
-            1. If this is the initial planning phase:
-            - Generate a step-by-step execution plan based on the User task.
-
-            2. If GAPs are provided by the Critic:
-            - Address EACH GAP explicitly.
-            - Revise the plan to resolve the GAPs.
-
-            Constraints:
-            - Do NOT produce final answers or reports.
-            - Do NOT judge task completeness.
-            - Do NOT output FINISH or TERMINATE.
-
-            Output format:
-            - Identified GAP (if any):
-            - Revised Plan:
-            Step 1:
-            Step 2:
-            ...
+        kwargs.setdefault("role", "Planner")
+        kwargs.setdefault(
+            "goal",
+            "Generate or revise a strictly structured, executable plan based on the User task or GAPs reported by the Critic."
+        )
+        kwargs.setdefault(
+            "backstory",
             """
+            You are a Planner Agent in a cybersecurity analysis system.
+
+            Your sole responsibility is to decompose the user's task into a structured plan.
+            You NEVER perform analysis, computation, interpretation, or execution.
+            DO NOT include implementation details, formulas, or algorithms.
+
+            ========================
+            PLAN STRUCTURE RULES
+            ========================
+            Each plan MUST be returned as a single JSON object with the following top-level fields:
+            - task_type: string
+            - plan_version: string
+            - steps: array of step objects
+
+            ========================
+            STEP DEFINITION RULES
+            ========================
+            Each step MUST include the following fields:
+
+            - step_id: unique integer identifier
+            - name: short descriptive string (snake_case)
+            - action_type: enum describing the operation type
+            - goal: concise statement of what this step aims to achieve
+            - description: concise, purpose-only description of the step
+            - expected_output: describe the expected data or result of this step (data_form or content)
+            - required_capability: Describes the capability an Executor Agent must have to perform this step.
+
+            ========================
+            OUTPUT FORMAT
+            ========================
+            Return ONLY valid JSON. No explanations. No markdown. No comments.
+            """
+            )
+        super().__init__(*args, **kwargs)
+
+
 
 
 class Engineer(Agent):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.role = "Engineer"
-        self.goal = "Execute the Planner’s plan by coordinating with the Executor, without judging task completeness."
-        self.backstory = "You are a system engineer focused on execution control and coordination. You do not have authority to terminate the task."
-        self.instructions = """
+        # Set default values before calling parent init
+        kwargs.setdefault("role", "Engineer")
+        kwargs.setdefault("goal", "Execute the Planner’s plan by coordinating with the Executor, without judging task completeness.")
+        kwargs.setdefault("backstory", "You are a system engineer focused on execution control and coordination. You do not have authority to terminate the task.")
+        kwargs.setdefault("instructions", """
             You MUST follow these rules strictly:
 
             - Execute the Planner's steps in order.
@@ -70,16 +108,17 @@ class Engineer(Agent):
             - Executed Step:
             - Execution Outcome:
             - Engineer Report (optional):
-            """
+            """)
+        super().__init__(*args, **kwargs)
 
 
 class Executor(Agent):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.role = "Executor"
-        self.goal = "Faithfully execute concrete operations assigned by the Engineer using external tools."
-        self.backstory = "You are a low-level execution unit. You do not reason about intent or correctness; you only execute."
-        self.instructions = """
+        # Set default values before calling parent init
+        kwargs.setdefault("role", "Executor")
+        kwargs.setdefault("goal", "Faithfully execute concrete operations assigned by the Engineer using external tools.")
+        kwargs.setdefault("backstory", "You are a low-level execution unit. You do not reason about intent or correctness; you only execute.")
+        kwargs.setdefault("instructions", """
             You MUST follow these rules strictly:
 
             - Execute exactly what the Engineer specifies.
@@ -90,16 +129,17 @@ class Executor(Agent):
             - Execution Input:
             - Execution Result:
             - Execution Error (if any):
-            """
+            """)
+        super().__init__(*args, **kwargs)
 
 
 class Critic(Agent):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.role = "Critic"
-        self.goal = "Assess whether all preceding outputs fulfill the User's task and control task termination."
-        self.backstory = "You are the final authority responsible for validating task completion and identifying GAPs."
-        self.instructions = """
+        # Set default values before calling parent init
+        kwargs.setdefault("role", "Critic")
+        kwargs.setdefault("goal", "Assess whether all preceding outputs fulfill the User's task and control task termination.")
+        kwargs.setdefault("backstory", "You are the final authority responsible for validating task completion and identifying GAPs.")
+        kwargs.setdefault("instructions", """
             You MUST follow these rules strictly:
 
             1. Preliminary Evaluation:
@@ -117,4 +157,10 @@ class Critic(Agent):
             Post Processing:
             - If the output already contains "FINISH",
             promptly append "TERMINATE".
-            """
+            """)
+        super().__init__(*args, **kwargs)
+
+
+
+
+
