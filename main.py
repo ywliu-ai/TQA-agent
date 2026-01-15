@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 load_dotenv()
 # 从环境变量获取 API 密钥，如果不存在则使用默认值
-api_key = os.environ.get("OPENAI_API_KEY", "bd4e0cd0cd0b49e4ca7ad1767baadf3a09cbab24f7aa6a9a8486cd7e3b9d9eaf")
-model_name = os.environ.get("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
-endpoint = os.environ.get("OPENAI_ENDPOINT", "https://api.openai.com/v1/chat/completions")
+api_key = os.environ.get("OPENAI_API_KEY", "")
+model_name = os.environ.get("OPENAI_MODEL_NAME", "")
+endpoint = os.environ.get("OPENAI_ENDPOINT", "")
 llm = CustomLLM(api_key=api_key, model=model_name, endpoint=endpoint, temperature=0.0, top_p=1.0)  
 
 class MainFlowState(BaseModel):
